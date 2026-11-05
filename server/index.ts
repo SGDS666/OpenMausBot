@@ -2807,7 +2807,10 @@ const store = new Store(
   () => bootSelection,
   (selection) => withNewBotEffort(selection, cfg.newBots?.effort, registry.get(selection.instanceId)?.adapter.capabilities.effortLevels),
   (instanceId) => registry.cliTarget(instanceId)?.driverKind,
-  () => appLanguage() ?? Intl.DateTimeFormat().resolvedOptions().locale,
+  () => {
+    const language = appLanguage();
+    return language === "" ? Intl.DateTimeFormat().resolvedOptions().locale : language ?? "zh";
+  },
   () => sharedMembership() ? undefined : cfg.profile?.name,
 );
 const outsideLineage = createOutsideLineage({
