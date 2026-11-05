@@ -23,6 +23,14 @@ afterEach(async () => {
 });
 
 describe("enterprise hook point", () => {
+  it("does not load an enterprise layer for an explicitly OSS instance", async () => {
+    const dir = fakeLayer("throw new Error('this layer must not execute');");
+    expect(await loadEnterpriseLayer({ dir, licenseKey: "fixture", env: { OMB_EDITION: "oss" } }))
+      .toEqual({ edition: "oss", features: [] });
+    const sessions = new SessionRegistry({ file: join(dir, "sessions.json") });
+    expect(createWorkspaceAccess({ sessions, cookieName: "session", closeSessionStreams() {}, env: { OMB_ADMIN_WORKSPACE: "acme" } })).toBeNull();
+    expect(hostedWorkspaceConfigured({ OMB_ADMIN_WORKSPACE: "acme" })).toBe(true);
+  });
   it("requires an explicit operator policy on a complete portal-managed non-desktop workspace", () => {
     const env = { OMB_ADMIN_URL: "https://admin.example.test", OMB_ADMIN_WORKSPACE: "acme", OMB_PUBLIC_URL: "https://acme.example.test",
       OMB_ADMIN_MEMBERSHIP: "portal", OMB_SHARED_WORKSPACE_FULL_ACCESS: "1" };

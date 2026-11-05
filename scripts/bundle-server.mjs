@@ -6,9 +6,12 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSyn
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { serverLocalePlugin } from "./server-locale-plugin.mjs";
+import { buildEdition, removeEnterpriseOutput } from "./build-edition.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const server = join(root, "server");
+const edition = buildEdition();
+if (edition === "oss") removeEnterpriseOutput(root);
 
 // yaml's Node export is CommonJS with dynamic requires that cannot run once
 // inlined into ESM; its browser export is the same parser without them.
@@ -79,6 +82,7 @@ await build({
   allowOverwrite: true,
   logLevel: "info",
   plugins: [yamlEsmPlugin, serverLocalePlugin],
+  define: { "process.env.OMB_BUILD_EDITION": JSON.stringify(edition) },
   banner: NODE_REQUIRE,
 });
 
@@ -122,10 +126,8 @@ await build({
   logLevel: "info",
 });
 
-// The enterprise layer (enterprise/LICENSE; delete the folder for pure OSS).
-// Shipped bundled to dist-server/enterprise/server/index.js, where the server
-// finds it; its own license travels with it.
-if (existsSync(join(root, "enterprise", "server", "index.ts"))) {
+// The enterprise layer has separate license terms in enterprise/LICENSE.
+if (edition === "enterprise" && existsSync(join(root, "enterprise", "server", "index.ts"))) {
   await build({
     entryPoints: [join(root, "enterprise", "server", "index.ts")],
     bundle: true,
@@ -166,6 +168,10 @@ await build({ entryPoints: [piMcpExtSrc], outfile: piMcpExtDest, bundle: true,
 // package.json, and the server reports this one (server/environment.ts).
 const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 writeFileSync(join(root, "dist-server", "package.json"), `${JSON.stringify({ type: "module", version })}\n`);
+writeFileSync(join(root, "dist-server", "build-edition.json"), `${JSON.stringify({ edition, version })}\n`);
+const licenseDirectory = join(root, "dist-server", "licenses");
+mkdirSync(licenseDirectory, { recursive: true });
+for (const name of ["LICENSE", "NOTICE"]) copyFileSync(join(root, name), join(licenseDirectory, name));
 
 // tsc copies the language packs server/server-lines.ts imports (13 MB) beside its own output. The bundles above carry
 // the server's keys, so nothing reads the copies.

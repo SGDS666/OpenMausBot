@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({
-  app: { name: "OpenMausBot" },
+  app: { name: "OpenMausBot", getLocale: vi.fn(() => "en-US") },
   Menu: { buildFromTemplate: (template) => template },
 }));
 
 import { buildApplicationMenu } from "./menu.mjs";
+import { app } from "electron";
 
 describe("buildApplicationMenu", () => {
   const originalPlatform = process.platform;
@@ -28,6 +29,7 @@ describe("buildApplicationMenu", () => {
         onSwitch: vi.fn(),
         onAddFromClipboard: vi.fn(),
         onForget: vi.fn(),
+        language: "en",
         ...overrides,
       }),
     );
@@ -111,5 +113,28 @@ describe("buildApplicationMenu", () => {
     expect(items.some((entry) => /This computer|organization|Add a Cloud|Connect to a server/.test(entry.label))).toBe(false);
     const onCloud = build("darwin", { environments: [cloud, office], activeId: "c", home }).find((entry) => entry.label === "Server").submenu;
     expect(onCloud.find((entry) => entry.id === "back-to-my-cloud").enabled).toBe(false);
+  });
+
+  it.each(["darwin", "linux", "win32"])("defaults the native menu to Simplified Chinese without changing server actions on %s", platform => {
+    const onSwitch = vi.fn(), onConnect = vi.fn();
+    const template = build(platform, { language: null, onSwitch, onConnect });
+    const items = template.find(entry => entry.label === "服务器").submenu;
+    expect(items[0]).toMatchObject({ label: "这台电脑", type: "radio" });
+    items[0].click();
+    expect(onSwitch).toHaveBeenCalledWith("local");
+    items.find(entry => entry.label === "连接服务器…").click();
+    expect(onConnect).toHaveBeenCalledOnce();
+    expect(items.find(entry => entry.label === "移除“X”")).toMatchObject({ enabled: true });
+    expect(template.find(entry => entry.label === "编辑").submenu.find(entry => entry.label === "复制").role).toBe("copy");
+    expect(template.find(entry => entry.label === "视图").submenu.find(entry => entry.label === "切换全屏").role).toBe("togglefullscreen");
+  });
+
+  it("respects English and an explicit follow-system choice, including after switching the language", () => {
+    expect(build("win32", { language: "zh-CN" }).some(entry => entry.label === "服务器")).toBe(true);
+    expect(build("win32", { language: "en" }).some(entry => entry.label === "Server")).toBe(true);
+    expect(build("win32", { language: "" }).some(entry => entry.label === "Server")).toBe(true);
+    vi.mocked(app.getLocale).mockReturnValueOnce("zh-Hans-CN");
+    expect(build("win32", { language: "" }).some(entry => entry.label === "服务器")).toBe(true);
+    expect(build("win32", { language: "fr" }).some(entry => entry.label === "Server")).toBe(true);
   });
 });

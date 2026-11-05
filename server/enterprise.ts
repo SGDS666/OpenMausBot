@@ -120,6 +120,7 @@ export async function loadEnterpriseLayer(
   options: { dir?: string; licenseKey?: string; env?: NodeJS.ProcessEnv; serverRoot?: string } = {},
 ): Promise<EditionStatus> {
   workspaceAccessFactory = undefined;
+  if (process.env.OMB_BUILD_EDITION === "oss" || (options.env ?? process.env).OMB_EDITION === "oss") return oss();
   const dirs = options.dir ? [options.dir] : enterpriseLayerDirs(options.env, options.serverRoot);
   const licenseKey = options.licenseKey ?? process.env.OMB_LICENSE_KEY;
   const entry = dirs.map(layerEntry).find((candidate) => candidate !== undefined);
