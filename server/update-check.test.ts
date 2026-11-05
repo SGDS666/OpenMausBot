@@ -1,7 +1,7 @@
 import { join, sep } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
-import { createUpdateChecker, installKind, isNewerVersion, LATEST_RELEASE_URL } from "./update-check.ts";
+import { createUpdateChecker, installKind, isNewerVersion, LATEST_RELEASE_URL, FORK_RELEASES_URL } from "./update-check.ts";
 
 const release = (tag: string) =>
   ({ ok: true, status: 200, json: async () => ({ tag_name: tag, html_url: `https://github.com/milind-soni/OpenMausBot/releases/tag/${tag}` }) }) as Response;
@@ -38,7 +38,7 @@ describe("server update check", () => {
     expect(isNewerVersion("v0.1.93-rc.1.1", "0.1.93-rc.1")).toBe(true);
   });
 
-  it("reports a newer release with the update command for this install", async () => {
+  it("reports only the fork release without an automatic update command", async () => {
     const fetch = vi.fn(async () => release("v0.1.93"));
     const check = createUpdateChecker({ current: "0.1.92", install: "docker", fetch });
     expect(await check()).toEqual({
@@ -46,9 +46,7 @@ describe("server update check", () => {
       install: "docker",
       latest: "0.1.93",
       available: true,
-      releaseUrl: "https://github.com/milind-soni/OpenMausBot/releases/tag/v0.1.93",
-      command: "docker compose pull omb && docker compose up -d",
-      restart: false,
+      releaseUrl: "https://github.com/SGDS666/OpenMausBot/releases/tag/v0.1.93",
     });
     expect(fetch).toHaveBeenCalledWith(LATEST_RELEASE_URL, expect.anything());
   });
@@ -57,7 +55,8 @@ describe("server update check", () => {
     let now = 0;
     const fetch = vi.fn(async () => release("v0.1.92"));
     const check = createUpdateChecker({ current: "0.1.92", install: "npm", fetch, now: () => now });
-    expect(await check()).toMatchObject({ available: false, latest: "0.1.92", command: "npm install -g openmausbot@latest", restart: true });
+    expect(await check()).toMatchObject({ available: false, latest: "0.1.92" });
+    expect((await check()).command).toBeUndefined();
     now = 59 * 60_000;
     await check();
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -79,6 +78,13 @@ describe("server update check", () => {
     const check = createUpdateChecker({ current: "0.1.92", install: "git", fetch });
     await expect(check()).rejects.toThrow("GitHub answered 403");
     fetch.mockImplementation(async () => release("v0.1.93"));
-    expect(await check()).toMatchObject({ available: true, command: "git pull && pnpm install", restart: true });
+    expect(await check()).toMatchObject({ available: true });
+    expect((await check()).command).toBeUndefined();
+  });
+
+  it("treats a fork with no stable releases as a manual release channel", async () => {
+    const fetch = vi.fn(async () => ({ ok: false, status: 404 }) as Response);
+    expect(await createUpdateChecker({ current: "0.1.141-dynasturn.1", install: "git", fetch })())
+      .toEqual({ current: "0.1.141-dynasturn.1", install: "git", available: false, releaseUrl: FORK_RELEASES_URL });
   });
 });

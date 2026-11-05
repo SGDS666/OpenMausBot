@@ -271,7 +271,7 @@ test("production wiring: main answers this computer's page, My Cloud's own page 
   localOrigin.setLocalOrigin(LOCAL);
   const sent = [], window = name => ({ isDestroyed: () => name === "closed", webContents: { send: (...message) => sent.push([name, ...message]) } });
   const windows = [window("team"), window("home"), window("closed")];
-  let switched = async id => { calls.push(["switch", id]); }, loads = true, broadcasts = 0;
+  let switched = async id => { calls.push(["switch", id]); }, loads = true, broadcasts = 0, menuRefreshes = 0;
   const context = vm.createContext({
     registerDesktopPrefs: value => { options = value; }, createDesktopPrefs: store => ({ store }), jsonFile: file => ({ read: () => file, write: () => {} }), ipcMain: {}, updatesConsent: null, cloudAccount: "the client",
     path: { join: (...parts) => parts.join("/") }, app: { getPath: () => "/user-data" }, desktopDataDir: () => "/home/.openmausbot",
@@ -283,6 +283,7 @@ test("production wiring: main answers this computer's page, My Cloud's own page 
     cloudPageAsking: event => event.verifiedCloud ? "cloud" : null,
     serverReady: true, LOCAL_ID: "local", switchEnvironment: id => switched(id),
     process: { platform: "win32" }, windowFrameMade: false, broadcastDesktopCapabilities: async () => { broadcasts++; },
+    refreshApplicationMenu: () => { menuRefreshes++; },
     // main's own: a failed switch shows its dialog and resolves.
     workspaceMenuAction: async action => { try { await action(); } catch { calls.push("dialog"); } },
   });
@@ -302,6 +303,7 @@ test("production wiring: main answers this computer's page, My Cloud's own page 
   assert.equal(await options.cloudOffered(), true);
   assert.deepEqual(calls, ["restored", "offers"]);
   options.languageChanged("en", windows[0].webContents);
+  assert.equal(menuRefreshes, 1, "native menus follow the language choice without restarting");
   assert.deepEqual(sent, [["home", "desktop-language:changed", "en"], ["rail", "desktop-language:changed", "en"]], "every other open window hears the pick, and the window's rail");
   const navigate = main.slice(main.indexOf("function navigateMainWindow(url) {"), main.indexOf("\n}\n", main.indexOf("function navigateMainWindow(url) {")) + 3);
   const load = vm.runInNewContext(`${navigate}; navigateMainWindow`, { mainWindow: { isDestroyed: () => false, loadURL: async url => { if (url.endsWith("fail")) throw new Error("ERR_CONNECTION_REFUSED"); } } });

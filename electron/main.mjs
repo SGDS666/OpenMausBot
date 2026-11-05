@@ -115,6 +115,11 @@ import { createOrgLibrary } from "./org-library.mjs";
 import { createCompanyBackups } from "./company-backups.mjs";
 import { createCompanyBackupSchedule } from "./company-backup-schedule.mjs";
 import { installServerSessions, reportOwnListeners } from "./server-session.mjs";
+import { FORK_APP_ID, FORK_DATA_DIRECTORY, FORK_PRODUCT_NAME, FORK_PROTOCOL, upstreamCompatibleDeepLink } from "./fork-policy.mjs";
+
+app.setName(FORK_PRODUCT_NAME);
+if (process.platform === "win32") app.setAppUserModelId(FORK_APP_ID);
+process.argv = process.argv.map(upstreamCompatibleDeepLink);
 
 const { desktopCapabilities, nativeDesktopActions } = capabilitiesModule;
 const nativeActions = nativeDesktopActions(process.platform);
@@ -179,7 +184,7 @@ function applyUnreadBadge(win = mainWindow) {
 // GNOME groups the window with its desktop entry only when both identities match; set before ready.
 if (process.platform === "linux") {
   if (linuxDisablesGpu()) app.disableHardwareAcceleration();
-  app.setDesktopName("com.openmausbot.app.desktop");
+  app.setDesktopName(`${FORK_APP_ID}.desktop`);
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -242,11 +247,13 @@ function queueChatLink(rawLink) {
 }
 
 app.on("open-url", (event, url) => {
+  url = upstreamCompatibleDeepLink(url);
   if (!queueOrganizationEntry(url) && !cloudEntry.fromUrl(url) && !queuePackageInstall(url) && !queueChatLink(url)) return;
   event.preventDefault();
 });
 
 app.on("second-instance", (_event, commandLine) => {
+  commandLine = commandLine.map(upstreamCompatibleDeepLink);
   if (takeOrganizationDeepLink(commandLine)) {
     queueOrganizationEntry("openmausbot://organization");
     return;
@@ -336,7 +343,7 @@ const serverSupervisor = createServerSupervisor({
 
 function desktopDataDir() {
   // An empty OMB_DATA_DIR falls back here too; server/config.ts would not, so the child gets this path.
-  return process.env.OMB_DATA_DIR || path.join(app.getPath("home"), ".openmausbot");
+  return process.env.OMB_DATA_DIR || path.join(app.getPath("home"), FORK_DATA_DIRECTORY);
 }
 
 async function stopUtilityServer(proc, timeoutMs = UTILITY_SERVER_STOP_TIMEOUT_MS) {
@@ -1547,6 +1554,7 @@ function activeOrigin() {
 function refreshApplicationMenu() {
   Menu.setApplicationMenu(
     buildApplicationMenu({
+      language: desktopPrefs?.language() ?? null,
       environments: environmentsState.environments,
       activeId: environmentsState.activeId,
       onSwitch: (id) => void workspaceMenuAction(() => switchEnvironment(id)),
@@ -1714,7 +1722,7 @@ function createLocalEnvironment(name, dataDir) {
       ? name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
       : "";
     if (typeof name !== "string" || !name.trim()) return { ok: false, error: "name", state };
-    candidateDir = path.join(os.homedir(), `.openmausbot-${slug && slug !== "clean" ? slug : randomUUID().slice(0, 8)}`);
+    candidateDir = path.join(os.homedir(), `${FORK_DATA_DIRECTORY}-${slug && slug !== "clean" ? slug : randomUUID().slice(0, 8)}`);
   } else {
     candidateDir = typeof dataDir === "string" ? dataDir.trim() : "";
     if (
@@ -1948,7 +1956,7 @@ async function forgetEnvironment(id, purge = false, confirmed = false) {
     const resolvedCanon = canonical(resolved);
     const rootCanon = canonical(root);
     if (runningDataDir && canonical(runningDataDir) === resolvedCanon) return { ok: false, error: "active" };
-    if (path.basename(resolved).startsWith(".openmausbot") && resolvedCanon !== rootCanon && !resolvedCanon.startsWith(rootCanon + path.sep)) {
+    if (path.basename(resolved).startsWith(FORK_DATA_DIRECTORY) && resolvedCanon !== rootCanon && !resolvedCanon.startsWith(rootCanon + path.sep)) {
       try {
         await fs.promises.rm(resolved, { recursive: true, force: true });
       } catch (error) {
@@ -2952,7 +2960,7 @@ app.whenReady().then(async () => {
   }
   installServerSessions({ app, defaultSession: session.defaultSession, serverPort: () => SERVER_PORT,
     ownerToken: () => (app.isPackaged && serverReady ? desktopMutationToken : null) });
-  if (app.isPackaged) app.setAsDefaultProtocolClient("openmausbot");
+  if (app.isPackaged) app.setAsDefaultProtocolClient(FORK_PROTOCOL);
   if (process.platform === "darwin") app.dock.setIcon(APP_ICON);
   secureCredentials = await loadSecureCredentials();
   // An orphaned third-party key with no clear handler left: drop it rather than keep it at rest.
@@ -3032,6 +3040,7 @@ app.whenReady().then(async () => {
   updatesConsent = registerDesktopPrefs({ ipcMain, cloudAccount: () => cloudAccount, prefs: desktopPrefs, localConfig: jsonFile(path.join(desktopDataDir(), "config.json")).read, cloudOffered: () => cloudAccountRestored().then(cloudOffersReady),
     frame: { made: () => windowFrameMade, restarts: process.platform === "win32", changed: () => void broadcastDesktopCapabilities() },
     languageChanged: (language, sender) => {
+      refreshApplicationMenu();
       for (const win of appWindows()) if (!win.isDestroyed() && win.webContents !== sender) win.webContents.send("desktop-language:changed", language);
       chromeRail.send("desktop-language:changed", language);
     },

@@ -24,7 +24,7 @@ if [ -n "${OPENMAUSBOT_POSTINSTALL_TEST_ROOT:-}" ]; then
   APPARMOR_STATUS=$APP_ROOT/test-system/apparmor_status
   USERNS_RESTRICTION=$APP_ROOT/test-system/apparmor_restrict_unprivileged_userns
 else
-  APP_ROOT=/opt/OpenMausBot
+  APP_ROOT='/opt/Dynasturn Console'
   EXPECTED_OWNER=root:root
   TEST_MODE=0
   APPARMOR_DIR=/etc/apparmor.d
@@ -150,7 +150,7 @@ install_browser_apparmor_profile() {
     echo "OpenMausBot AppArmor policy directory is unsafe: $APPARMOR_DIR" >&2
     exit 1
   fi
-  target=$APPARMOR_DIR/openmausbot-browser
+  target=$APPARMOR_DIR/dynasturn-console-browser
   if [ -L "$target" ] || { [ -e "$target" ] && [ ! -f "$target" ]; }; then
     echo "OpenMausBot AppArmor profile target is unsafe: $target" >&2
     exit 1

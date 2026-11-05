@@ -2,19 +2,14 @@
 import { existsSync } from "node:fs";
 import { join, sep } from "node:path";
 
-export const LATEST_RELEASE_URL = "https://api.github.com/repos/milind-soni/OpenMausBot/releases/latest";
+export const LATEST_RELEASE_URL = "https://api.github.com/repos/SGDS666/OpenMausBot/releases/latest";
+export const FORK_RELEASES_URL = "https://github.com/SGDS666/OpenMausBot/releases";
 const CACHE_MS = 60 * 60_000;
 
 /** "managed" is a hosted or Cloud server that is updated for its owner. */
 export type InstallKind = "desktop" | "managed" | "docker" | "podman" | "npm" | "git" | "unknown";
 
-/** As docs/self-hosting.md and deploy/podman/README.md give them. */
-export const UPDATE_COMMANDS: Partial<Record<InstallKind, { command: string; restart: boolean }>> = {
-  docker: { command: "docker compose pull omb && docker compose up -d", restart: false },
-  podman: { command: "git pull && cd deploy/podman && PODMAN_COMPOSE_PROVIDER=podman-compose podman compose --env-file .env -f compose.yaml up -d --build", restart: false },
-  npm: { command: "npm install -g openmausbot@latest", restart: true },
-  git: { command: "git pull && pnpm install", restart: true },
-};
+export const UPDATE_COMMANDS: Partial<Record<InstallKind, { command: string; restart: boolean }>> = {};
 
 export function installKind(input: {
   desktopManaged: boolean;
@@ -96,6 +91,11 @@ export function createUpdateChecker(options: {
           headers: { accept: "application/vnd.github+json", "user-agent": "openmausbot-update-check" },
           signal: AbortSignal.timeout(8_000),
         });
+        if (response.status === 404) {
+          const result = { ...base(), releaseUrl: FORK_RELEASES_URL };
+          cached = { at: now(), result };
+          return result;
+        }
         if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
         const release = await response.json() as { tag_name?: unknown; html_url?: unknown };
         if (typeof release.tag_name !== "string") throw new Error("GitHub sent no release tag");
@@ -104,7 +104,7 @@ export function createUpdateChecker(options: {
           ...base(),
           latest,
           available: isNewerVersion(latest, options.current),
-          ...(typeof release.html_url === "string" ? { releaseUrl: release.html_url } : {}),
+          releaseUrl: `${FORK_RELEASES_URL}/tag/${encodeURIComponent(release.tag_name)}`,
         };
         cached = { at: now(), result };
         return result;

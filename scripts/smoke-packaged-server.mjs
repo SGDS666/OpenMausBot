@@ -166,6 +166,8 @@ writeFileSync(
 // The packaged tree carries the bundled enterprise layer inside the server
 // root, or a licensed install silently runs the open-source edition.
 const layerShipped = existsSync(join(staging, "server", "enterprise", "server", "index.js"));
+const editionManifest = join(staging, "server", "build-edition.json");
+const builtEdition = existsSync(editionManifest) ? JSON.parse(readFileSync(editionManifest, "utf8")).edition : null;
 let editionReport = null;
 if (listening) {
   try {
@@ -422,6 +424,11 @@ if (layerShipped && (!editionReport || editionReport.error || String(editionRepo
   process.exit(1);
 }
 
+if (builtEdition === "oss" && (layerShipped || editionReport?.edition !== "oss" || editionReport?.features?.length !== 0)) {
+  console.error("OSS bundle must contain no enterprise layer and report no enterprise features:", editionReport);
+  process.exit(1);
+}
+
 if (!proxyReport || proxyReport.error || proxyReport.missing.length > 0) {
   console.error("spawned proxy paths do not resolve inside the packaged server dir:");
   console.error(JSON.stringify(proxyReport, null, 2));
@@ -471,4 +478,5 @@ console.log("packaged backup worker exported an encrypted archive ✓");
 if (launcherReport) console.log("packaged container launcher ran the server as its child and stopped it cleanly ✓");
 if (desktopEntryReport) console.log(`packaged desktop entry started the server twice on its compile cache (${desktopEntryReport.starts[0].cached.length} entries) ✓`);
 if (layerShipped) console.log("packaged server found its enterprise layer inside the server dir ✓");
+if (builtEdition === "oss") console.log("OSS bundle contains no enterprise layer; /api/edition reports oss with no enterprise features ✓");
 if (browserBundle) console.log(`packaged browser discovered without installation; access on by default ✓ ${JSON.stringify(browserReport)}`);

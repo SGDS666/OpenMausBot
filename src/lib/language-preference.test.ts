@@ -52,7 +52,7 @@ describe("app language preference", () => {
     expect(preference.useLanguageChoice()).toBeNull();
     expect(hook.serverSnapshot!()).toBeNull();
     expect(preference.effectiveLanguage(preference.languageChoice(), "fr")).toBe("fr");
-    expect(preference.effectiveLanguage(preference.languageChoice(), undefined)).toBe("");
+    expect(preference.effectiveLanguage(preference.languageChoice(), undefined)).toBe("zh");
   });
 
   it("saves the choice on this device without asking the server", async () => {
@@ -75,6 +75,24 @@ describe("app language preference", () => {
     expect(preference.languageChoice()).toBe("");
     expect(preference.effectiveLanguage(preference.languageChoice(), "fr")).toBe("");
   });
+
+  it("loads Simplified Chinese before the first page on a fresh device", async () => {
+    vi.stubGlobal("navigator", { language: "en-US" });
+    const preference = await import("./language-preference");
+    expect(await preference.loadPageLanguage()).toBe("zh");
+    expect(local.setItem).not.toHaveBeenCalled();
+  });
+
+  it.each([["en", "zh-CN", "en"], ["", "en-US", "en"], ["", "zh-TW", "zh-tw"]])(
+    "keeps saved choice %s on a system using %s before the first page",
+    async (choice, system, shown) => {
+      local.setItem("omb-language", choice);
+      vi.stubGlobal("navigator", { language: system });
+      const preference = await import("./language-preference");
+      expect(await preference.loadPageLanguage()).toBe(shown);
+      expect(preference.languageChoice()).toBe(choice);
+    },
+  );
 
   it("notifies mounted consumers and follows another window's change", async () => {
     const preference = await import("./language-preference");
@@ -173,11 +191,11 @@ describe("app language in the desktop app", () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 
-  it("keeps System as the default, and the server's language, until a language is picked on this computer", async () => {
+  it("uses Simplified Chinese by default while preserving the server's language until a device choice is saved", async () => {
     const page = await openPage(desktopApp());
     expect(page.preference.languageChoice()).toBeNull();
     expect(page.preference.effectiveLanguage(page.preference.languageChoice(), "fr")).toBe("fr");
-    expect(page.preference.effectiveLanguage(page.preference.languageChoice(), undefined)).toBe("");
+    expect(page.preference.effectiveLanguage(page.preference.languageChoice(), undefined)).toBe("zh");
     expect(page.bridge.set).not.toHaveBeenCalled();
   });
 
